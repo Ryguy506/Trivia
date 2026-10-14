@@ -1,0 +1,16 @@
+[project]
+name = "trivia-backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.142.2",
+    "langchain>=1.4.3",
+    "langchain-openai>=1.6.7",
+    "langchain-tavily>=0.2.18",
+    "langchain-typesafe==0.0.1a3",
+    "langgraph>=1.2.14",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.4",
+]
