@@ -2,14 +2,11 @@
 
 Jev returns a calibrated probability per question, so callers pick thresholds.
 """
-import os
 
-from dotenv import load_dotenv
 from langchain_typesafe import ClassifierRequest, Noul, NoulCriteria, TypeSafeClassifier
 
+from app import config
 from app.game.graph.schemas import MultipleChoiceQuestion
-
-load_dotenv()
 
 class TokenRouterClassifier(TypeSafeClassifier):
     """TypeSafeClassifier pointed at TokenRouter's Jev endpoint.
@@ -26,10 +23,10 @@ class TokenRouterClassifier(TypeSafeClassifier):
 
 # Creating the classifier fails without a key, so it's optional: None means "skip these checks"
 classifier = TokenRouterClassifier(
-    api_key=os.getenv("TOKEN_ROUTER_API_KEY"),
+    api_key=config.TOKEN_ROUTER_API_KEY,
     base_url="https://api.tokenrouter.com/api/alpha/decisions",
     model="typesafe/jev-1.13",  # TokenRouter has no "jev-latest" (the library default)
-) if os.getenv("TOKEN_ROUTER_API_KEY") else None
+) if config.TOKEN_ROUTER_API_KEY else None
 
 USEFUL = "useful"
 SUPPORTED = "supported"

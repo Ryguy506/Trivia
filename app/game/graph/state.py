@@ -12,8 +12,7 @@ class Document(TypedDict):
 class GraphState(TypedDict):
     category: str
     num_questions: int
-    queries: list[str]            # every query used so far, so retries search something new
-    pending_queries: list[str]    # queries for the current search round
-    documents: list[Document]     # search results from the current round
+    titles: list[str]             # every Wikipedia article picked so far, so retries find new ones
+    documents: list[Document]     # articles from the current round
     questions: list[SourcedQuestion]
     attempts: int

@@ -48,33 +48,52 @@ class Room:
 
     def add_player(self, player_name: str, player_socket: WebSocket) -> None:
         self.connections[player_name] = player_socket
+        self.score.setdefault(player_name, 0)
 
-    def remove_player(self, player_name: str) -> None:
-        self.connections.pop(player_name, None)
+    def remove_player(self, player_name: str) -> list[dict]:
+        """Drop the player's connection (their score stays); returns the messages to broadcast."""
+        if self.connections.pop(player_name, None) is None:
+            return []
+        # the round may have been waiting only on this player
+        return self._end_round_if_done()
 
-    def add_answer(self, player_name: str, answer: str) -> None:
-        if self.current_question is None:
-            return
-        if player_name not in self.answers:
-          self.answers[player_name] = answer
+    def submit_answer(self, player_name: str, answer_index: object) -> list[dict]:
+        """Record an answer; returns the messages to broadcast (empty until the round ends)."""
+        if (self.phase != "question" or player_name not in self.connections
+                or player_name in self.answers):
+            return []
+        # bool is an int subclass, so check the exact type of the client's value
+        if type(answer_index) is not int or not 0 <= answer_index < len(self.current_question.options):
+            return []
+        self.answers[player_name] = answer_index
+        return self._end_round_if_done()
 
-    def add_score(self, player_name: str) -> None:
-        if player_name not in self.score:
-            self.score[player_name] = 0
-        if self.answers[player_name] == self.current_question.correct_index:
-            self.score[player_name] += 1
-
-    def reset_ansewers(self) -> None:
+    def _end_round_if_done(self) -> list[dict]:
+        """Score the round once every connected player has answered, then advance or finish."""
+        if self.phase != "question" or not self.connections or not self.connections.keys() <= self.answers.keys():
+            return []
+        correct_index = self.current_question.correct_index
+        for player_name, answer_index in self.answers.items():
+            if answer_index == correct_index:
+                self.score[player_name] += 1
         self.answers = {}
-
+        if self.next_question() is not None:
+            return [self.public_question()]
+        self.phase = "results"
+        return [{"type": "phase", "phase": "results"},
+                {"type": "results", "scores": dict(self.score)}]
 
     async def broadcast(self, message: dict) -> None:
         # Copy the items so a player leaving mid-loop doesn't break iteration
+        follow_ups = []
         for player_name, socket in list(self.connections.items()):
             try:
                 await socket.send_json(message)
             except Exception:
-                self.remove_player(player_name)
+                follow_ups += self.remove_player(player_name)
+        # sent after the loop so everyone gets this message before the next one
+        for follow_up in follow_ups:
+            await self.broadcast(follow_up)
 
     
     async def change_phase(self, phase: str) -> None:

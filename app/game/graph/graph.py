@@ -3,30 +3,27 @@ import random
 
 from langgraph.graph import END, START, StateGraph
 
-from app.game.graph.nodes import generate, plan_searches, should_continue, web_search
+from app.game.graph.nodes import generate, research, should_continue
 from app.game.graph.schemas import SourcedQuestion
 from app.game.graph.state import GraphState
 
 builder = StateGraph(GraphState)
-builder.add_node("plan_searches", plan_searches)
-builder.add_node("web_search", web_search)
+builder.add_node("research", research)
 builder.add_node("generate", generate)
 
-builder.add_edge(START, "plan_searches")
-builder.add_edge("plan_searches", "web_search")
-builder.add_edge("web_search", "generate")
-builder.add_conditional_edges("generate", should_continue, ["plan_searches", END])
+builder.add_edge(START, "research")
+builder.add_edge("research", "generate")
+builder.add_conditional_edges("generate", should_continue, ["research", END])
 
 trivia_graph = builder.compile()
 
 
 async def generate_trivia(category: str, num_questions: int = 10) -> list[SourcedQuestion]:
-    """Search the web for the category and return up to num_questions grounded questions."""
+    """Research Wikipedia for the category and return up to num_questions grounded questions."""
     state = await trivia_graph.ainvoke({
         "category": category,
         "num_questions": num_questions,
-        "queries": [],
-        "pending_queries": [],
+        "titles": [],
         "documents": [],
         "questions": [],
         "attempts": 0,

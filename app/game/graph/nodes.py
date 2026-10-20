@@ -1,74 +1,73 @@
 import asyncio
 import logging
 import math
-import random
 
-from dotenv import load_dotenv
-from langchain_tavily import TavilySearch
+from langchain_mcp_adapters.tools import load_mcp_tools
 from langgraph.graph import END
 
-from app.game.graph.chains.categoryContext import search_plan_chain
+from app.game.graph.chains.research import research_agent, wikipedia_mcp
 from app.game.graph.chains.generation import generation_chain
 from app.game.graph.chains import judges
 from app.game.graph.schemas import MultipleChoiceQuestion, SourcedQuestion
 from app.game.graph.state import Document, GraphState
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
-BRAINSTORM_QUERIES = 20   # the LLM brainstorms this many; we randomly pick from them
-QUERIES_PER_ROUND = 4
 QUESTIONS_PER_DOC = 2
-MIN_CONTENT_CHARS = 200   # skip snippets too short to ground a question
+MIN_CONTENT_CHARS = 200   # skip stubs too short to ground a question
+MAX_CONTENT_CHARS = 8000  # the article's opening is enough for 2 questions and keeps LLM/Jev input small
 MAX_ATTEMPTS = 3
 EXTRA_DOCS = 2            # pages kept beyond what's needed, as a buffer for rejected questions
+EXTRA_PICKS = 2           # articles the agent picks beyond max_docs, so Jev has some to reject
 
 # Jev thresholds (probabilities 0-1);
 PAGE_USEFUL_MIN = 0.5
 ANSWER_SUPPORTED_MIN = 0.8
 ANSWER_AMBIGUOUS_MAX = 0.3
 
-web_search_tool = TavilySearch(max_results=3, search_depth="advanced")
-
 
 def _norm(text: str) -> str:
     return " ".join(text.split()).lower()
 
 
-async def plan_searches(state: GraphState) -> dict:
-    plan = await search_plan_chain.ainvoke({
-        "category": state["category"],
-        "num_queries": BRAINSTORM_QUERIES,
-        "used_queries": "\n".join(state["queries"]) or "none",
-    })
-    # LLMs suggest similar topics every time; sampling randomly keeps each game different
-    fresh = [q for q in plan.queries if q not in state["queries"]]
-    picked = random.sample(fresh, min(QUERIES_PER_ROUND, len(fresh)))
-    return {"pending_queries": picked, "queries": state["queries"] + picked,
-            "attempts": state["attempts"] + 1}
-
-
-async def web_search(state: GraphState) -> dict:
-    responses = await asyncio.gather(
-        *(web_search_tool.ainvoke({"query": q}) for q in state["pending_queries"]),
-        return_exceptions=True,
-    )
-    used_urls = {q.source_url for q in state["questions"]}
-    documents: list[Document] = []
-    for response in responses:
-        # Failed searches come back as an exception, an error string, or {"error": ...}
-        if not isinstance(response, dict) or "results" not in response:
-            continue
-        for result in response["results"]:
-            content = result.get("content") or ""
-            if result["url"] in used_urls or len(content) < MIN_CONTENT_CHARS:
-                continue
-            used_urls.add(result["url"])
-            documents.append({"url": result["url"], "title": result.get("title", ""), "content": content})
-
+async def research(state: GraphState) -> dict:
+    """An agent browses Wikipedia (over MCP) to pick articles; then we fetch their full text."""
     needed = state["num_questions"] - len(state["questions"])
     max_docs = math.ceil(needed / QUESTIONS_PER_DOC) + EXTRA_DOCS
-    return {"documents": await _best_pages(state["category"], documents, max_docs)}
+    # shortcut: starts a Wikipedia MCP server per round (a few seconds); keep one alive for the
+    # app's lifetime if that shows up in the "generating" wait.
+    try:
+        async with wikipedia_mcp.session("wikipedia") as session:
+            agent = research_agent(await load_mcp_tools(session), max_docs + EXTRA_PICKS)
+            used = "\n".join(state["titles"]) or "none"
+            result = await agent.ainvoke({"messages": [{"role": "user", "content":
+                                          f"Category: {state['category']}\n\nAlready used:\n{used}"}]})
+            titles = list(dict.fromkeys(t for t in result["structured_response"].titles
+                                        if t not in state["titles"]))
+            documents = await _fetch_articles(session, titles)
+    except Exception:
+        # A failed round counts as an attempt; questions from earlier rounds are kept
+        logger.exception("Research round failed")
+        return {"attempts": state["attempts"] + 1, "documents": []}
+    return {"titles": state["titles"] + titles, "attempts": state["attempts"] + 1,
+            "documents": await _best_pages(state["category"], documents, max_docs)}
+
+
+async def _fetch_articles(session, titles: list[str]) -> list[Document]:
+    """Full article text, so questions and Jev checks are grounded in the real page, not a summary."""
+    results = await asyncio.gather(*(session.call_tool("get_article", {"title": t}) for t in titles),
+                                   return_exceptions=True)
+    documents: list[Document] = []
+    for title, result in zip(titles, results):
+        # Failures come back as an exception, an MCP error result, or {"exists": false}
+        article = None if isinstance(result, Exception) or result.isError else result.structuredContent
+        if not article or not article.get("exists"):
+            logger.warning("Couldn't fetch article %r: %s", title, result)
+            continue
+        content = (article.get("text") or "")[:MAX_CONTENT_CHARS]
+        if len(content) >= MIN_CONTENT_CHARS:
+            documents.append({"url": article.get("url") or title, "title": article["title"], "content": content})
+    return documents
 
 
 async def _best_pages(category: str, documents: list[Document], max_docs: int) -> list[Document]:
@@ -99,16 +98,17 @@ async def generate(state: GraphState) -> dict:
         return {}
 
     per_doc = min(QUESTIONS_PER_DOC, math.ceil(needed / len(documents)))
-    results = await generation_chain.abatch(
-        [{"num_questions": per_doc, "context": doc["content"]} for doc in documents],
-        return_exceptions=True,
-    )
+    # One call for all pages: TokenRouter allows only 10 requests a minute
+    context = "\n\n".join(f"[Source {i}] {doc['title']}\n{doc['content']}" for i, doc in enumerate(documents))
+    try:
+        result = await generation_chain.ainvoke({"num_questions": per_doc * len(documents),
+                                                 "per_source": per_doc, "context": context})
+    except Exception:
+        logger.exception("Question generation failed")  # the round counts as an attempt
+        return {}
 
-    candidates = [
-        (doc, q)
-        for doc, result in zip(documents, results) if not isinstance(result, Exception)
-        for q in result.questions
-    ]
+    candidates = [(documents[q.source], MultipleChoiceQuestion(**q.model_dump(exclude={"source"})))
+                  for q in result.questions if q.source < len(documents)]
     candidates = await _verified(candidates)
 
     seen = {_norm(q.question) for q in state["questions"]}
@@ -150,4 +150,4 @@ async def _verified(candidates: list[tuple[Document, MultipleChoiceQuestion]]):
 def should_continue(state: GraphState) -> str:
     if len(state["questions"]) >= state["num_questions"] or state["attempts"] >= MAX_ATTEMPTS:
         return END
-    return "plan_searches"
+    return "research"
