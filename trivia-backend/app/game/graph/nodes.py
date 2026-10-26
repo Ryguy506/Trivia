@@ -41,7 +41,7 @@ async def research(state: GraphState) -> dict:
             agent = research_agent(await load_mcp_tools(session), max_docs + EXTRA_PICKS)
             used = "\n".join(state["titles"]) or "none"
             result = await agent.ainvoke({"messages": [{"role": "user", "content":
-                                          f"Category: {state['category']}\n\nAlready used:\n{used}"}]})
+                                          f"Topic: {state['topic']}\n\nAlready used:\n{used}"}]})
             titles = list(dict.fromkeys(t for t in result["structured_response"].titles
                                         if t not in state["titles"]))
             documents = await _fetch_articles(session, titles)
@@ -50,7 +50,7 @@ async def research(state: GraphState) -> dict:
         logger.exception("Research round failed")
         return {"attempts": state["attempts"] + 1, "documents": []}
     return {"titles": state["titles"] + titles, "attempts": state["attempts"] + 1,
-            "documents": await _best_pages(state["category"], documents, max_docs)}
+            "documents": await _best_pages(state["topic"], documents, max_docs)}
 
 
 async def _fetch_articles(session, titles: list[str]) -> list[Document]:
@@ -70,12 +70,12 @@ async def _fetch_articles(session, titles: list[str]) -> list[Document]:
     return documents
 
 
-async def _best_pages(category: str, documents: list[Document], max_docs: int) -> list[Document]:
+async def _best_pages(topic: str, documents: list[Document], max_docs: int) -> list[Document]:
     """Use Jev to drop weak pages and keep the most useful ones, before any LLM generation."""
     if judges.classifier is None or not documents:
         return documents[:max_docs]
     responses = await judges.classifier.abatch(
-        [judges.page_request(category, d["title"], d["content"]) for d in documents],
+        [judges.page_request(topic, d["title"], d["content"]) for d in documents],
         return_exceptions=True,
     )
     scored = []

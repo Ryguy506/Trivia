@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 from fastapi import WebSocket
 
@@ -9,14 +10,29 @@ class Room:
     room_code: str
     room_name: str
     room_description: str
-    category: str
+    topic: str
+    mode: str
     connections: dict[str, WebSocket] = field(default_factory=dict)
     phase: str = "lobby"
     questions: list[SourcedQuestion] = field(default_factory=list)
     current_index: int = 0
     answers: dict[str, int] = field(default_factory=dict)
     score: dict[str , int] = field(default_factory=dict)
-    
+    timer: float = 30  # seconds per question
+    # set by _end_round so run_timer restarts its countdown for the next question
+    round_ended: asyncio.Event = field(default_factory=asyncio.Event)
+    timer_task: asyncio.Task | None = None  # held here so the running task isn't garbage-collected
+
+    async def run_timer(self) -> None:
+        """Runs once per game: ends any round still open after `timer` seconds, until results."""
+        while self.phase == "question":
+            self.round_ended.clear()
+            try:
+                await asyncio.wait_for(self.round_ended.wait(), self.timer)
+            except TimeoutError:
+                for message in self._end_round():
+                    await self.broadcast(message)
+
     @property
     def current_question(self) -> SourcedQuestion | None:
         if 0 <= self.current_index < len(self.questions):
@@ -38,7 +54,7 @@ class Room:
         if q is None:
             return None
         return {"type": "question", "index": self.current_index, "total": len(self.questions),
-                "question": q.question, "options": q.options}
+                "question": q.question, "options": q.options, "seconds": self.timer}
 
     def player_names(self) -> list[str]:
         return list(self.connections.keys())
@@ -68,10 +84,9 @@ class Room:
         self.answers[player_name] = answer_index
         return self._end_round_if_done()
 
-    def _end_round_if_done(self) -> list[dict]:
-        """Score the round once every connected player has answered, then advance or finish."""
-        if self.phase != "question" or not self.connections or not self.connections.keys() <= self.answers.keys():
-            return []
+    def _end_round(self) -> list[dict]:
+        """Score the round (no answer counts as wrong), then advance or finish."""
+        self.round_ended.set()
         correct_index = self.current_question.correct_index
         for player_name, answer_index in self.answers.items():
             if answer_index == correct_index:
@@ -82,6 +97,12 @@ class Room:
         self.phase = "results"
         return [{"type": "phase", "phase": "results"},
                 {"type": "results", "scores": dict(self.score)}]
+
+    def _end_round_if_done(self) -> list[dict]:
+        """Score the round once every connected player has answered, then advance or finish."""
+        if self.phase != "question" or not self.connections or not self.connections.keys() <= self.answers.keys():
+            return []
+        return self._end_round()
 
     async def broadcast(self, message: dict) -> None:
         # Copy the items so a player leaving mid-loop doesn't break iteration

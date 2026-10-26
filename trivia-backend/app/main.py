@@ -5,7 +5,7 @@ from app.game.graph.graph import generate_trivia
 
 
 def create_app(question_source) -> FastAPI:
-    """question_source: async (category) -> list[SourcedQuestion]. Tests pass a canned one."""
+    """question_source: async (topic) -> list[SourcedQuestion]. Tests pass a canned one."""
     app = FastAPI(title="Trivia Game Server")
     app.state.question_source = question_source
     # Dev: allow any localhost port, plus "null" for pages opened via file://

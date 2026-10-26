@@ -33,14 +33,14 @@ SUPPORTED = "supported"
 AMBIGUOUS = "ambiguous"
 
 
-def page_request(category: str, title: str, content: str) -> ClassifierRequest:
+def page_request(topic: str, title: str, content: str) -> ClassifierRequest:
     return {
-        "state": {"trivia_category": category, "page_title": title, "page_text": content},
+        "state": {"trivia_topic": topic, "page_title": title, "page_text": content},
         "questions": {
             USEFUL: Noul(
-                instructions="Is this page text a good source for trivia questions in the given category?",
+                instructions="Is this page text a good source for trivia questions on the given topic?",
                 criteria=NoulCriteria(
-                    true="On-topic for the category and states specific, checkable facts (names, dates, numbers, places).",
+                    true="About the topic and states specific, checkable facts (names, dates, numbers, places).",
                     false="Off-topic, mostly opinion or marketing, navigation/boilerplate, or too vague to quiz on.",
                 ),
             ),

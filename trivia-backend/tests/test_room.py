@@ -25,7 +25,7 @@ def make_question() -> SourcedQuestion:
 
 def make_room(players=("ann", "bob"), num_questions=2) -> Room:
     """A room mid-game, on the first question."""
-    room = Room("ABCD", "Test room", "", "History")
+    room = Room("ABCD", "Test room", "", "History", "trivia")
     for name in players:
         room.add_player(name, FakeSocket())
     room.set_questions([make_question() for _ in range(num_questions)])
@@ -45,7 +45,8 @@ def test_round_end_sends_only_the_next_question():
     messages = room.submit_answer("bob", 1)
     # no scores and no correct answer between rounds
     assert messages == [{"type": "question", "index": 1, "total": 2,
-                         "question": "Which letter is right?", "options": ["A", "B", "C", "D"]}]
+                         "question": "Which letter is right?", "options": ["A", "B", "C", "D"],
+                         "seconds": 30}]
     assert room.phase == "question"
 
 
@@ -129,3 +130,32 @@ def test_dropped_sockets_during_broadcast_end_the_round():
     assert room.player_names() == ["ann", "bob"]
     assert ann.sent == [chat, room.public_question()]
     assert room.current_index == 1
+
+
+def test_timer_ends_rounds_nobody_finished():
+    room = make_room(num_questions=2)
+    room.timer = 0.01
+    room.submit_answer("ann", 0)  # bob never answers
+
+    asyncio.run(room.run_timer())  # returns once the game reaches results
+
+    assert room.phase == "results"
+    bob = room.connections["bob"]
+    assert [m["type"] for m in bob.sent] == ["question", "phase", "results"]
+    assert bob.sent[-1]["scores"] == {"ann": 1, "bob": 0}
+
+
+def test_finishing_early_restarts_the_timer_for_the_next_question():
+    room = make_room(num_questions=2)
+    room.timer = 0.2
+
+    async def play():
+        task = asyncio.create_task(room.run_timer())
+        await asyncio.sleep(0.1)
+        room.submit_answer("ann", 0)
+        room.submit_answer("bob", 0)
+        await asyncio.sleep(0.15)  # past the first question's deadline, inside the second's
+        assert room.current_index == 1
+        task.cancel()
+
+    asyncio.run(play())

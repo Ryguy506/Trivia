@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>WS Test Client</title>
+<style>body{font-family:system-ui;max-width:600px;margin:2rem auto;padding:0 1rem}#log{border:1px solid #ccc;height:300px;overflow:auto;padding:.5rem;font-family:monospace;font-size:13px}input,button{margin:.25rem 0}#questionBox{border:1px solid #ccc;padding:.75rem;margin:.5rem 0}#questionBox[hidden]{display:none}#options button{display:block;width:100%;text-align:left;padding:.5rem}#status{color:#666}</style>
+</head>
+<body>
+<h2>Throwaway test client</h2>
+<div><input id="roomName" placeholder="Room Name"> <input id="roomDesc" placeholder="Room Desc">
+  <input id="topic" list="topics" maxlength="80" placeholder="Topic (e.g. volcanoes)"><datalist id="topics"></datalist></div>
+<button onclick="createRoom()">Create room</button>
+
+<div><input id="code" placeholder="Room code"> <input id="name" placeholder="Your name"> <button onclick="join()">Join</button></div>
+<div><input id="chat" placeholder="Chat message"> <button onclick="send({type:'chat',text:chat.value})">Send chat</button></div>
+<div><button onclick="send({type:'start_game'})">Start game</button> <span id="status"></span></div>
+<div id="questionBox" hidden>
+  <div id="questionMeta"></div>
+  <h3 id="questionText"></h3>
+  <div id="options"></div>
+</div>
+<div id="log"></div>
+<script>
+const API = "http://localhost:8000";
+let ws;
+const escapeHtml = s => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const log = m => { const d = document.getElementById("log"); d.innerHTML += m + "<br>"; d.scrollTop = d.scrollHeight; };
+// Suggest the backend's categories; any typed topic works too, so a failed fetch only loses suggestions
+async function loadCategories() {
+  try {
+    const categories = await fetch(API + "/categories").then(r => r.json());
+    document.getElementById("topics").replaceChildren(...categories.map(c => new Option(c)));
+  } catch {
+    log("Couldn't load topic suggestions");
+  }
+}
+loadCategories();
+
+async function createRoom() {
+  const res = await fetch(API + "/rooms",
+  { method: "POST" ,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room_name: roomName.value , room_description : roomDesc.value,
+                           topic: document.getElementById("topic").value }),
+  });
+  const r = await res.json();
+  if (!res.ok) return log(escapeHtml("Create failed: " + JSON.stringify(r.detail)));
+  code.value = r.room_code;
+  // Room fields are host-typed text: escape them before they reach the innerHTML log
+  log(escapeHtml("Created room " + r.room_code + " (" + r.room_name + " - " + r.room_description + ") [" + r.topic + "]"));
+}
+
+function join() {
+  // Can't use the `name` global: it's window.name, which shadows <input id="name">
+  const roomCode = document.getElementById("code").value.trim();
+  const playerName = document.getElementById("name").value.trim();
+  if (!roomCode || !playerName) return log("Enter a room code and your name");
+  ws = new WebSocket(`ws://localhost:8000/ws/${encodeURIComponent(roomCode)}/${encodeURIComponent(playerName)}`);
+  ws.onopen = () => log("Connected");
+  ws.onmessage = e => { log("&larr; " + e.data); handleMessage(JSON.parse(e.data)); };
+  ws.onclose = e => log(`Closed (${e.code}) ${e.reason}`);
+}
+function handleMessage(msg) {
+  const status = document.getElementById("status");
+  if (msg.type === "phase") {
+    status.textContent = msg.phase === "generating" ? "Generating questions…" : "Phase: " + msg.phase;
+    if (msg.phase !== "question") document.getElementById("questionBox").hidden = true;
+  } else if (msg.type === "question") {
+    showQuestion(msg);
+  } else if (msg.type === "error") {
+    status.textContent = "Error: " + msg.message;
+  }
+}
+
+// Build with textContent, not innerHTML: question text comes from the web and could contain HTML
+function showQuestion(msg) {
+  document.getElementById("questionMeta").textContent = `Question ${msg.index + 1} of ${msg.total}`;
+  document.getElementById("questionText").textContent = msg.question;
+  const options = document.getElementById("options");
+  options.replaceChildren();
+  msg.options.forEach((text, i) => {
+    const button = document.createElement("button");
+    button.textContent = `${"ABCD"[i]}. ${text}`;
+    button.onclick = () => {
+      send({ type: "submit_answer", index: msg.index, answer_index: i });
+      options.querySelectorAll("button").forEach(b => b.disabled = true);
+      button.style.fontWeight = "bold";
+    };
+    options.appendChild(button);
+  });
+  document.getElementById("questionBox").hidden = false;
+}
+
+function send(obj) { if (ws?.readyState === 1) { ws.send(JSON.stringify(obj)); log("&rarr; " + JSON.stringify(obj)); } }
+</script>
+</body>
+</html>

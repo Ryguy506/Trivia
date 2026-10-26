@@ -1,7 +1,15 @@
+import asyncio
+import json
+import logging
+
 from app.game.registry import get_room
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["websocket"])
+
+# Below this a narrow topic makes too short a game; the host is asked for a broader one
+MIN_QUESTIONS = 5
 
 
 @router.websocket("/ws/{room_code}/{player_name}")
@@ -22,23 +30,31 @@ async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
 
     try:
         while True:
-            data = await websocket.receive_json()
-            # For now just relay chat messages; game actions (answers, start game) go here later
+            # Clients are untrusted: skip anything that isn't a JSON object instead of crashing the socket
+            try:
+                data = json.loads(await websocket.receive_text())
+            except ValueError:
+                continue
+            if not isinstance(data, dict):
+                continue
             if data.get("type") == "start_game":
                 if room.phase != "lobby":  # ignore double-clicks / restarts mid-game
                     continue
                 await room.change_phase("generating")
                 try:
-                    questions = await websocket.app.state.question_source(room.category)
+                    questions = await websocket.app.state.question_source(room.topic)
                 except Exception:
+                    logger.exception("Question generation failed for room %s", room.room_code)
                     questions = []
-                if not questions:
-                    await room.broadcast({"type": "error", "message": "Couldn't generate questions"})
+                if len(questions) < MIN_QUESTIONS:
+                    await room.broadcast({"type": "error",
+                                          "message": "Not enough material for that topic. Try something broader."})
                     await room.change_phase("lobby")
                     continue
                 room.set_questions(questions)
                 await room.change_phase("question")
                 await room.broadcast(room.public_question())
+                room.timer_task = asyncio.create_task(room.run_timer())
 
             elif data.get("type") == "chat":
                 await room.broadcast({"type": "chat", "player": player_name,
@@ -49,6 +65,9 @@ async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
                     await room.broadcast(message)
 
     except WebSocketDisconnect:
+        pass
+    finally:
+        # Runs on any exit, so a crashed handler can't leave a ghost player holding the round and name
         follow_ups = room.remove_player(player_name)
         await room.broadcast({"type": "player_left", "player": player_name,
                               "players": room.player_names()})

@@ -1,6 +1,7 @@
 from enum import StrEnum
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 
 class Category(StrEnum):
@@ -16,16 +17,22 @@ class Category(StrEnum):
     ART_AND_CULTURE = "Art and culture"
 
 
+# Free text: Category values are only suggestions for it
+Topic = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=80)]
+
+
 class RoomCreate(BaseModel):
     room_name: str = Field(min_length=1, max_length=50, examples=["Friday Trivia"])
     room_description: str = Field(default="", max_length=200, examples=["This is room 1"])
-    category: Category = Field(examples=[Category.GEOGRAPHY])
+    topic: Topic = Field(examples=["90s hip hop"])
+    mode: Literal["trivia"] = "trivia"  # only game so far; new modes extend the Literal
 
 
 class RoomOut(BaseModel):
     room_code: str
     room_name: str
     room_description: str
-    category: Category
+    topic: str
+    mode: str
     phase: str
     players: list[str]
