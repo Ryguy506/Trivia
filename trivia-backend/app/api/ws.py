@@ -28,6 +28,9 @@ async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
     await room.broadcast({"type": "player_joined", "player": player_name,
                           "players": room.player_names()})
 
+    if room.host is None:
+        room.host = player_name
+
     try:
         while True:
             # Clients are untrusted: skip anything that isn't a JSON object instead of crashing the socket
@@ -40,15 +43,16 @@ async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
             if data.get("type") == "start_game":
                 if room.phase != "lobby":  # ignore double-clicks / restarts mid-game
                     continue
-                await room.change_phase("generating")
+                await room.change_phase("generating")  # questions usually ready already; the spinner covers the rest
                 try:
-                    questions = await websocket.app.state.question_source(room.topic)
+                    questions = await room.questions_task
                 except Exception:
                     logger.exception("Question generation failed for room %s", room.room_code)
                     questions = []
                 if len(questions) < MIN_QUESTIONS:
                     await room.broadcast({"type": "error",
                                           "message": "Not enough material for that topic. Try something broader."})
+                    room.prepare_questions(websocket.app.state.question_source)  # fresh attempt for the next Start
                     await room.change_phase("lobby")
                     continue
                 room.set_questions(questions)

@@ -38,7 +38,7 @@ async def research(state: GraphState) -> dict:
     # app's lifetime if that shows up in the "generating" wait.
     try:
         async with wikipedia_mcp.session("wikipedia") as session:
-            agent = research_agent(await load_mcp_tools(session), max_docs + EXTRA_PICKS)
+            agent = research_agent(await load_mcp_tools(session), max_docs + EXTRA_PICKS, state["difficulty"])
             used = "\n".join(state["titles"]) or "none"
             result = await agent.ainvoke({"messages": [{"role": "user", "content":
                                           f"Topic: {state['topic']}\n\nAlready used:\n{used}"}]})

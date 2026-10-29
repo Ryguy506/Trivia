@@ -1,7 +1,7 @@
 from app.game.registry import new_room, get_room, list_rooms
 from app.game.room import Room
 from app.api.dto import RoomCreate, RoomOut
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -13,6 +13,7 @@ def to_room_out(room: Room) -> RoomOut:
         room_description=room.room_description,
         topic=room.topic,
         mode=room.mode,
+        difficulty=room.difficulty,
         phase=room.phase,
         players=room.player_names(),
     )
@@ -33,8 +34,10 @@ async def find_room(room_code: str) -> RoomOut:
 
 
 @router.post("", status_code=201)
-async def create_room(body: RoomCreate) -> RoomOut:
-    room = new_room(body.room_name, body.room_description, body.topic, body.mode)
+async def create_room(body: RoomCreate, request: Request) -> RoomOut:
+    room = new_room(body.room_name, body.room_description, body.topic, body.mode, body.difficulty)
+    room.prepare_questions(request.app.state.question_source)
+    print(request.app.state.question_source)
     return to_room_out(room)
 
 

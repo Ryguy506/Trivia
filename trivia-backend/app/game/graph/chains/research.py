@@ -31,13 +31,11 @@ system = """You pick Wikipedia articles that will supply source material for tri
 Find {num_articles} articles for the given trivia topic.
 
 How to work:
-1. First brainstorm specific subjects that a casual pub-quiz player has heard of and would enjoy
-   being asked about (for a "Space" quiz: the Apollo 11 landing, Mars, the Hubble Space Telescope,
-   not an obscure asteroid or a minor probe).
+1. First brainstorm specific subjects {audience}.
 2. Then search for those subjects by name, in parallel, to get their exact article titles.
 
 Rules:
-- Each article is about one specific, well-known subject (a person, place, event, dish, brand, work...).
+- Each article is about one specific subject (a person, place, event, dish, brand, work...).
   Avoid broad overviews, lists, and disambiguation pages.
 - Spread across the whole topic; don't cluster around one theme.
 - Never pick an article from the already-used list.
@@ -47,11 +45,24 @@ llm = ChatOpenAI(model="openai/gpt-6-luna", api_key=config.TOKEN_ROUTER_API_KEY,
                  base_url=config.BASE_URL, timeout=30, max_retries=1 , reasoning_effort="none")
 
 
-def research_agent(tools: list[BaseTool], num_articles: int):
+# Difficulty only changes which articles get picked; hard stays "substantial" so pages aren't stubs
+AUDIENCE = {
+    "easy": """that almost everyone has heard of, even non-fans (for a "Space" quiz: the Moon landing,
+   Mars, the Sun; not a specific telescope or probe)""",
+    "medium": """that a casual pub-quiz player has heard of and would enjoy being asked about (for a
+   "Space" quiz: the Apollo 11 landing, Mars, the Hubble Space Telescope, not an obscure asteroid
+   or a minor probe)""",
+    "hard": """that an enthusiast of the topic would know but a casual player likely wouldn't, each still
+   substantial enough to have a full article (for a "Space" quiz: the Voyager Golden Record,
+   Olympus Mons, the Tunguska event; not a stub about a minor asteroid)""",
+}
+
+
+def research_agent(tools: list[BaseTool], num_articles: int, difficulty: str):
     return create_agent(
         llm,
         [t for t in tools if t.name in AGENT_TOOLS],
-        system_prompt=system.format(num_articles=num_articles),
+        system_prompt=system.format(num_articles=num_articles, audience=AUDIENCE[difficulty]),
         response_format=ArticlePicks,
         # "continue": once over the limit, tool calls are refused and the model must answer
         middleware=[ToolCallLimitMiddleware(run_limit=MAX_TOOL_CALLS) ],

@@ -4,6 +4,8 @@ export const API_URL = ''
 export const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
 
 export type Mode = 'trivia'
+export type Difficulty = 'easy' | 'medium' | 'hard'
+export const difficultyLabel: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 export type Phase = 'lobby' | 'generating' | 'question' | 'results'
 
 export interface RoomCreate {
@@ -11,6 +13,7 @@ export interface RoomCreate {
   room_description: string
   topic: string
   mode: Mode
+  difficulty: Difficulty
 }
 
 export interface RoomOut {
@@ -19,6 +22,7 @@ export interface RoomOut {
   room_description: string
   topic: string
   mode: Mode
+  difficulty: Difficulty
   phase: Phase
   players: string[]
 }

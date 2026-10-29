@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listRooms, type RoomOut } from '../api'
+import { difficultyLabel, listRooms, type RoomOut } from '../api'
 
 export const POLL_MS = 5000
 
@@ -31,7 +31,7 @@ export function LobbyList({ onJoin }: { onJoin: (code: string) => void }) {
             <li key={r.room_code} className="room-row">
               <div>
                 <strong>{r.room_name}</strong>
-                <span className="muted"> · {r.topic} · {r.mode === 'trivia' ? 'Trivia' : r.mode}</span>
+                <span className="muted"> · {r.topic} · {r.mode === 'trivia' ? 'Trivia' : r.mode} · {difficultyLabel[r.difficulty]}</span>
                 <div className="muted">{r.players.length} {r.players.length === 1 ? 'player' : 'players'}</div>
               </div>
               {r.phase === 'lobby'

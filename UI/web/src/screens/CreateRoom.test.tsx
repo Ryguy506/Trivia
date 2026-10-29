@@ -39,5 +39,12 @@ test('sends trivia mode and hands back the room and trimmed name', async () => {
   render(<CreateRoom onCreated={onCreated} onBack={() => {}} />)
   fill({ 'Room name': 'Friday', Topic: 'Volcanoes', 'Your name': ' ann ' })
   await vi.waitFor(() => expect(onCreated).toHaveBeenCalledWith(room(), 'ann'))
-  expect(createRoom).toHaveBeenCalledWith({ room_name: 'Friday', room_description: '', topic: 'Volcanoes', mode: 'trivia' })
+  expect(createRoom).toHaveBeenCalledWith({ room_name: 'Friday', room_description: '', topic: 'Volcanoes', mode: 'trivia', difficulty: 'medium' })
+})
+
+test('sends the chosen difficulty', async () => {
+  createRoom.mockResolvedValue(room())
+  render(<CreateRoom onCreated={() => {}} onBack={() => {}} />)
+  fill({ 'Room name': 'Friday', Topic: 'Volcanoes', Difficulty: 'hard', 'Your name': 'ann' })
+  await vi.waitFor(() => expect(createRoom).toHaveBeenCalledWith(expect.objectContaining({ difficulty: 'hard' })))
 })

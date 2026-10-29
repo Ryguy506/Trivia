@@ -18,10 +18,11 @@ builder.add_conditional_edges("generate", should_continue, ["research", END])
 trivia_graph = builder.compile()
 
 
-async def generate_trivia(topic: str, num_questions: int = 10) -> list[SourcedQuestion]:
+async def generate_trivia(topic: str, difficulty: str = "medium", num_questions: int = 10) -> list[SourcedQuestion]:
     """Research Wikipedia for the topic and return up to num_questions grounded questions."""
     state = await trivia_graph.ainvoke({
         "topic": topic,
+        "difficulty": difficulty,
         "num_questions": num_questions,
         "titles": [],
         "documents": [],

@@ -1,4 +1,4 @@
-import type { RoomOut } from '../api'
+import { difficultyLabel, type RoomOut } from '../api'
 import { Chat } from '../room/Chat'
 import { Generating } from '../room/Generating'
 import { Lobby } from '../room/Lobby'
@@ -34,7 +34,7 @@ export function Room({ room, player, onLeave }: Props) {
       <header className="room-header">
         <div>
           <h1>{room.room_name}</h1>
-          <p className="muted">Trivia · {room.topic}</p>
+          <p className="muted">Trivia · {room.topic} · {difficultyLabel[room.difficulty]}</p>
         </div>
         <div className="room-code">
           <span>Code</span> <strong>{room.room_code}</strong>

@@ -6,6 +6,7 @@ export const room = (overrides: Partial<RoomOut> = {}): RoomOut => ({
   room_description: '',
   topic: 'Volcanoes',
   mode: 'trivia',
+  difficulty: 'medium',
   phase: 'lobby',
   players: ['ann'],
   ...overrides,

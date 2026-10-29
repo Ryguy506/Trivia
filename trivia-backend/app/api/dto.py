@@ -21,11 +21,15 @@ class Category(StrEnum):
 Topic = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=80)]
 
 
+Difficulty = Literal["easy", "medium", "hard"]
+
+
 class RoomCreate(BaseModel):
     room_name: str = Field(min_length=1, max_length=50, examples=["Friday Trivia"])
     room_description: str = Field(default="", max_length=200, examples=["This is room 1"])
     topic: Topic = Field(examples=["90s hip hop"])
     mode: Literal["trivia"] = "trivia"  # only game so far; new modes extend the Literal
+    difficulty: Difficulty = "medium"
 
 
 class RoomOut(BaseModel):
@@ -34,5 +38,6 @@ class RoomOut(BaseModel):
     room_description: str
     topic: str
     mode: str
+    difficulty: str
     phase: str
     players: list[str]

@@ -12,16 +12,23 @@ class Room:
     room_description: str
     topic: str
     mode: str
+    difficulty: str = "medium"
     connections: dict[str, WebSocket] = field(default_factory=dict)
     phase: str = "lobby"
     questions: list[SourcedQuestion] = field(default_factory=list)
     current_index: int = 0
     answers: dict[str, int] = field(default_factory=dict)
     score: dict[str , int] = field(default_factory=dict)
+    host: str | None = None
     timer: float = 30  # seconds per question
     # set by _end_round so run_timer restarts its countdown for the next question
     round_ended: asyncio.Event = field(default_factory=asyncio.Event)
     timer_task: asyncio.Task | None = None  # held here so the running task isn't garbage-collected
+    questions_task: asyncio.Task | None = None
+
+    def prepare_questions(self, question_source) -> None:
+        """Generate in the background from room creation, so Start rarely waits the full ~30 s."""
+        self.questions_task = asyncio.create_task(question_source(self.topic, self.difficulty))
 
     async def run_timer(self) -> None:
         """Runs once per game: ends any round still open after `timer` seconds, until results."""

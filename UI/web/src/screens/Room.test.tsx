@@ -24,7 +24,7 @@ test('connects as the player and shows room info', async () => {
   expect(socket.url).toBe(`ws://${location.host}/ws/ABCD/ann`)
   expect(screen.getByText('Friday Trivia')).toBeTruthy()
   expect(screen.getByText('ABCD')).toBeTruthy()
-  expect(screen.getByText(/Volcanoes/)).toBeTruthy()
+  expect(screen.getByText('Trivia · Volcanoes · Medium')).toBeTruthy()
 })
 
 test('opens one socket even under StrictMode', async () => {

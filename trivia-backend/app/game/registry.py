@@ -12,9 +12,9 @@ def new_room_code(length: int = 4) -> str:
             return code
 
 
-def new_room(room_name: str, room_description: str, topic: str, mode: str) -> Room:
+def new_room(room_name: str, room_description: str, topic: str, mode: str, difficulty: str) -> Room:
     room_code = new_room_code()
-    room = Room(room_code, room_name, room_description, topic, mode)
+    room = Room(room_code, room_name, room_description, topic, mode, difficulty)
     _rooms[room_code] = room
     return room
 

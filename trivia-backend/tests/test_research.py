@@ -29,11 +29,11 @@ def article(title, text=LONG_TEXT):
 
 
 def state(**overrides):
-    return {"topic": "History", "num_questions": 10, "titles": [], "documents": [],
+    return {"topic": "History", "difficulty": "medium", "num_questions": 10, "titles": [], "documents": [],
             "questions": [], "attempts": 0, **overrides}
 
 
-def fake_wikipedia(monkeypatch, session, picks):
+def fake_wikipedia(monkeypatch, session, picks, difficulties=None):
     @asynccontextmanager
     async def open_session(name):
         yield session
@@ -47,7 +47,12 @@ def fake_wikipedia(monkeypatch, session, picks):
 
     monkeypatch.setattr(nodes.wikipedia_mcp, "session", open_session)
     monkeypatch.setattr(nodes, "load_mcp_tools", no_tools)
-    monkeypatch.setattr(nodes, "research_agent", lambda tools, n: FakeAgent())
+    def make_agent(tools, n, difficulty):
+        if difficulties is not None:
+            difficulties.append(difficulty)
+        return FakeAgent()
+
+    monkeypatch.setattr(nodes, "research_agent", make_agent)
     monkeypatch.setattr(judges, "classifier", None)  # skip the Jev page check
 
 
@@ -72,6 +77,13 @@ def test_research_skips_used_and_repeated_titles(monkeypatch):
     assert out["titles"] == ["Sparta", "Rome", "Carthage"]
     assert [d["title"] for d in out["documents"]] == ["Rome", "Carthage"]
     assert out["attempts"] == 2
+
+
+def test_research_agent_gets_the_room_difficulty(monkeypatch):
+    difficulties = []
+    fake_wikipedia(monkeypatch, FakeSession({"Rome": article("Rome")}), ["Rome"], difficulties)
+    asyncio.run(nodes.research(state(difficulty="hard")))
+    assert difficulties == ["hard"]
 
 
 def test_failed_round_counts_as_an_attempt_and_keeps_questions(monkeypatch):

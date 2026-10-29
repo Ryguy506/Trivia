@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ApiError, createRoom, listCategories, type RoomOut } from '../api'
+import { ApiError, createRoom, listCategories, type Difficulty, type RoomOut } from '../api'
 
 interface Props {
   onCreated: (room: RoomOut, player: string) => void
@@ -36,7 +36,8 @@ export function CreateRoom({ onCreated, onBack }: Props) {
     setBusy(true)
     setError(null)
     try {
-      const room = await createRoom({ room_name: name, room_description: field('room_description'), topic, mode: 'trivia' })
+      const room = await createRoom({ room_name: name, room_description: field('room_description'), topic, mode: 'trivia',
+        difficulty: field('difficulty') as Difficulty })
       onCreated(room, player)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Can't reach the server.")
@@ -69,6 +70,14 @@ export function CreateRoom({ onCreated, onBack }: Props) {
         <datalist id="topic-suggestions">
           {suggestions.map(s => <option key={s} value={s} />)}
         </datalist>
+        <label>
+          Difficulty
+          <select name="difficulty" defaultValue="medium">
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
         <label>
           Your name
           <input name="player" maxLength={20} required autoComplete="nickname" />

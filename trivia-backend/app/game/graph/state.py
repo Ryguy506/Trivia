@@ -11,6 +11,7 @@ class Document(TypedDict):
 
 class GraphState(TypedDict):
     topic: str
+    difficulty: str               # easy | medium | hard: steers which articles research picks
     num_questions: int
     titles: list[str]             # every Wikipedia article picked so far, so retries find new ones
     documents: list[Document]     # articles from the current round
