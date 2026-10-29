@@ -6,7 +6,7 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from langgraph.graph import END
 
 from app.game.graph.chains.research import research_agent, wikipedia_mcp
-from app.game.graph.chains.generation import generation_chain
+from app.game.graph.chains.generation import DIFFICULTY, generation_chain
 from app.game.graph.chains import judges
 from app.game.graph.schemas import MultipleChoiceQuestion, SourcedQuestion
 from app.game.graph.state import Document, GraphState
@@ -102,7 +102,8 @@ async def generate(state: GraphState) -> dict:
     context = "\n\n".join(f"[Source {i}] {doc['title']}\n{doc['content']}" for i, doc in enumerate(documents))
     try:
         result = await generation_chain.ainvoke({"num_questions": per_doc * len(documents),
-                                                 "per_source": per_doc, "context": context})
+                                                 "per_source": per_doc, "context": context,
+                                                 "difficulty": DIFFICULTY[state["difficulty"]]})
     except Exception:
         logger.exception("Question generation failed")  # the round counts as an attempt
         return {}

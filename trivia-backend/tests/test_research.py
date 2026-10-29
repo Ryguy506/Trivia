@@ -99,7 +99,7 @@ def test_failed_round_counts_as_an_attempt_and_keeps_questions(monkeypatch):
 
 
 def test_generate_writes_all_questions_in_one_call_and_maps_sources(monkeypatch):
-    from app.game.graph.chains.generation import Generate, GeneratedQuestion
+    from app.game.graph.chains.generation import DIFFICULTY, Generate, GeneratedQuestion
 
     calls = []
 
@@ -116,9 +116,10 @@ def test_generate_writes_all_questions_in_one_call_and_maps_sources(monkeypatch)
     monkeypatch.setattr(nodes, "generation_chain", FakeChain())
     monkeypatch.setattr(judges, "classifier", None)
     docs = [{"url": "u/rome", "title": "Rome", "content": "x"}, {"url": "u/carthage", "title": "Carthage", "content": "y"}]
-    out = asyncio.run(nodes.generate(state(documents=docs)))
+    out = asyncio.run(nodes.generate(state(documents=docs, difficulty="hard")))
 
     assert len(calls) == 1
+    assert calls[0]["difficulty"] == DIFFICULTY["hard"]
     assert "[Source 0] Rome" in calls[0]["context"] and "[Source 1] Carthage" in calls[0]["context"]
     # out-of-range source dropped, near-duplicate dropped
     assert [(x.question, x.source_url) for x in out["questions"]] == [("About Rome?", "u/rome"),
