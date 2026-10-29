@@ -4,6 +4,8 @@ from fastapi import WebSocket
 
 from app.game.graph.schemas import SourcedQuestion
 
+REVEAL_SECONDS = 4  # how long the answer shows before the next question
+
 
 @dataclass
 class Room:
@@ -21,7 +23,7 @@ class Room:
     score: dict[str , int] = field(default_factory=dict)
     host: str | None = None
     timer: float = 30  # seconds per question
-    # set by _end_round so run_timer restarts its countdown for the next question
+    # set by _end_round: run_timer then shows the answer and moves on; while set, answers are ignored
     round_ended: asyncio.Event = field(default_factory=asyncio.Event)
     timer_task: asyncio.Task | None = None  # held here so the running task isn't garbage-collected
     questions_task: asyncio.Task | None = None
@@ -31,7 +33,8 @@ class Room:
         self.questions_task = asyncio.create_task(question_source(self.topic, self.difficulty))
 
     async def run_timer(self) -> None:
-        """Runs once per game: ends any round still open after `timer` seconds, until results."""
+        """Runs once per game: ends any round still open after `timer` seconds, leaves the answer
+        up for REVEAL_SECONDS, then sends the next question, until results."""
         while self.phase == "question":
             self.round_ended.clear()
             try:
@@ -39,6 +42,9 @@ class Room:
             except TimeoutError:
                 for message in self._end_round():
                     await self.broadcast(message)
+            await asyncio.sleep(REVEAL_SECONDS)
+            for message in self.advance():
+                await self.broadcast(message)
 
     @property
     def current_question(self) -> SourcedQuestion | None:
@@ -72,17 +78,22 @@ class Room:
     def add_player(self, player_name: str, player_socket: WebSocket) -> None:
         self.connections[player_name] = player_socket
         self.score.setdefault(player_name, 0)
+        if self.host is None:
+            self.host = player_name
 
     def remove_player(self, player_name: str) -> list[dict]:
         """Drop the player's connection (their score stays); returns the messages to broadcast."""
         if self.connections.pop(player_name, None) is None:
             return []
+        if self.host == player_name:
+            # connections keep join order, so this is the longest-connected player (None if empty)
+            self.host = next(iter(self.connections), None)
         # the round may have been waiting only on this player
         return self._end_round_if_done()
 
     def submit_answer(self, player_name: str, answer_index: object) -> list[dict]:
         """Record an answer; returns the messages to broadcast (empty until the round ends)."""
-        if (self.phase != "question" or player_name not in self.connections
+        if (self.phase != "question" or self.round_ended.is_set() or player_name not in self.connections
                 or player_name in self.answers):
             return []
         # bool is an int subclass, so check the exact type of the client's value
@@ -92,13 +103,20 @@ class Room:
         return self._end_round_if_done()
 
     def _end_round(self) -> list[dict]:
-        """Score the round (no answer counts as wrong), then advance or finish."""
+        """Score the round (no answer counts as wrong) and reveal the answer; run_timer moves on."""
         self.round_ended.set()
-        correct_index = self.current_question.correct_index
+        q = self.current_question
         for player_name, answer_index in self.answers.items():
-            if answer_index == correct_index:
+            if answer_index == q.correct_index:
                 self.score[player_name] += 1
         self.answers = {}
+        # each client compares correct_index with its own pick, so no one's pick is sent
+        return [{"type": "round_result", "index": self.current_index, "correct_index": q.correct_index,
+                 "supporting_quote": q.supporting_quote, "source_url": q.source_url,
+                 "scores": dict(self.score)}]
+
+    def advance(self) -> list[dict]:
+        """After the reveal: the next question, or the results after the last one."""
         if self.next_question() is not None:
             return [self.public_question()]
         self.phase = "results"
@@ -106,7 +124,7 @@ class Room:
                 {"type": "results", "scores": dict(self.score)}]
 
     def _end_round_if_done(self) -> list[dict]:
-        """Score the round once every connected player has answered, then advance or finish."""
+        """End the round once every connected player has answered."""
         if self.phase != "question" or not self.connections or not self.connections.keys() <= self.answers.keys():
             return []
         return self._end_round()

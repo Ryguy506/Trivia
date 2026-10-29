@@ -35,7 +35,7 @@ test('opens one socket even under StrictMode', async () => {
 
 test('player list and chat update from the socket; chat is plain text', async () => {
   const socket = await enter()
-  act(() => socket.receive({ type: 'player_joined', player: 'bob', players: ['ann', 'bob'] }))
+  act(() => socket.receive({ type: 'player_joined', player: 'bob', players: ['ann', 'bob'], host: 'ann' }))
   expect(screen.getByText('bob')).toBeTruthy()
   act(() => socket.receive({ type: 'chat', player: 'bob', text: '<b>x</b>' }))
   expect(screen.getByText('<b>x</b>')).toBeTruthy()
@@ -61,8 +61,18 @@ test.each([
   expect(onLeave).toHaveBeenCalled()
 })
 
+test('only the host sees Start; others see who they are waiting for', async () => {
+  const socket = await enter()
+  act(() => socket.receive({ type: 'player_joined', player: 'ann', players: ['bob', 'ann'], host: 'bob' }))
+  expect(screen.queryByRole('button', { name: 'Start game' })).toBeNull()
+  expect(screen.getByText('Waiting for bob to start')).toBeTruthy()
+  act(() => socket.receive({ type: 'player_left', player: 'bob', players: ['ann'], host: 'ann' }))
+  expect(screen.getByRole('button', { name: 'Start game' })).toBeTruthy()
+})
+
 test('start → generating → error → lobby shows the error and lets you start again', async () => {
   const socket = await enter()
+  act(() => socket.receive({ type: 'player_joined', player: 'ann', players: ['ann'], host: 'ann' }))
   fireEvent.click(screen.getByRole('button', { name: 'Start game' }))
   expect(socket.sent).toEqual([{ type: 'start_game' }])
   act(() => socket.receive({ type: 'phase', phase: 'generating' }))
@@ -91,7 +101,12 @@ test('a scripted game plays through questions to sorted results', async () => {
   expect(socket.sent).toEqual([{ type: 'submit_answer', answer_index: 1 }])
   for (const b of screen.getAllByRole('button', { name: /^[A-D]\./ })) expect((b as HTMLButtonElement).disabled).toBe(true)
 
+  act(() => socket.receive({ type: 'round_result', index: 0, correct_index: 1, supporting_quote: 'Green it is.',
+                             source_url: 'https://example.com', scores: { ann: 1 } }))
+  expect(screen.getByRole('status').textContent).toBe('Correct!')
+
   act(() => socket.receive(question(1)))
+  expect(screen.queryByRole('status')).toBeNull()
   expect(screen.getByText('Question 2 of 2')).toBeTruthy()
   expect((screen.getByRole('button', { name: /Red/ }) as HTMLButtonElement).disabled).toBe(false)
 

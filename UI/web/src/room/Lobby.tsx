@@ -1,10 +1,11 @@
 interface Props {
   players: string[]
   me: string
+  host: string | null
   onStart: () => void
 }
 
-export function Lobby({ players, me, onStart }: Props) {
+export function Lobby({ players, me, host, onStart }: Props) {
   return (
     <section aria-label="Players">
       <h2>Players ({players.length})</h2>
@@ -17,7 +18,9 @@ export function Lobby({ players, me, onStart }: Props) {
         ))}
       </ul>
       <p className="muted">Share the room code above so friends can join.</p>
-      <button className="primary" onClick={onStart}>Start game</button>
+      {host === me
+        ? <button className="primary" onClick={onStart}>Start game</button>
+        : <p className="muted">{host ? `Waiting for ${host} to start` : 'Joining…'}</p>}
     </section>
   )
 }

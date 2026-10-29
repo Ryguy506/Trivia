@@ -28,10 +28,11 @@ export interface RoomOut {
 }
 
 export type ServerMessage =
-  | { type: 'player_joined' | 'player_left'; player: string; players: string[] }
+  | { type: 'player_joined' | 'player_left'; player: string; players: string[]; host: string | null }
   | { type: 'chat'; player: string; text: string }
   | { type: 'phase'; phase: Phase }
   | { type: 'question'; index: number; total: number; question: string; options: string[]; seconds: number }
+  | { type: 'round_result'; index: number; correct_index: number; supporting_quote: string; source_url: string; scores: Record<string, number> }
   | { type: 'results'; scores: Record<string, number> }
   | { type: 'error'; message: string }
 

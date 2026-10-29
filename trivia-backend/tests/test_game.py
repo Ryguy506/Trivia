@@ -2,6 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.game import room as room_module
 from app.game.graph.schemas import SourcedQuestion
 from app.main import create_app
 
@@ -20,6 +21,12 @@ TOO_FEW = "Not enough material for that topic. Try something broader."
 
 async def failing_questions(topic, difficulty):
     raise RuntimeError("search is down")
+
+
+@pytest.fixture(autouse=True)
+def short_reveal(monkeypatch):
+    # long enough that every round_result is sent before run_timer sends the next question
+    monkeypatch.setattr(room_module, "REVEAL_SECONDS", 0.01)
 
 
 @pytest.fixture
@@ -63,6 +70,7 @@ def test_full_game(make_client):
             assert recv_until(bob, "chat", text=f"round {i}")["player"] == "ann"
             bob.send_json({"type": "submit_answer", "answer_index": 1})
             ann.send_json({"type": "submit_answer", "answer_index": 0})
+            assert recv_until(bob, "round_result")["correct_index"] == 0
 
         assert recv_until(ann, "results")["scores"] == {"ann": 5, "bob": 0}
         bob.close()
@@ -177,3 +185,29 @@ def test_generation_starts_when_the_room_is_created(make_client):
     code = client.post("/rooms", json={"room_name": "Test", "topic": "volcanoes"}).json()["room_code"]
     client.get(f"/rooms/{code}")  # one more request lets the loop run the new task
     assert seen == ["volcanoes"]  # before anyone joined or pressed Start
+
+
+def test_join_and_leave_messages_name_the_host(make_client):
+    client = make_client(canned_questions)
+    code = new_room(client)
+    with client.websocket_connect(f"/ws/{code}/ann") as ann:
+        assert recv_until(ann, "player_joined")["host"] == "ann"  # her own join already says so
+        with client.websocket_connect(f"/ws/{code}/bob") as bob:
+            assert recv_until(bob, "player_joined")["host"] == "ann"
+            ann.close()
+            assert recv_until(bob, "player_left")["host"] == "bob"
+
+
+def test_only_the_host_can_start(make_client):
+    client = make_client(canned_questions)
+    code = new_room(client)
+    with client.websocket_connect(f"/ws/{code}/ann") as ann, client.websocket_connect(f"/ws/{code}/bob") as bob:
+        while recv_until(ann, "player_joined")["player"] != "bob":
+            pass
+        bob.send_json({"type": "start_game"})
+        bob.send_json({"type": "chat", "text": "after start"})
+        # messages from one socket are handled in order: bob's start was ignored before his chat
+        message = ann.receive_json()
+        assert message == {"type": "chat", "player": "bob", "text": "after start"}
+        ann.send_json({"type": "start_game"})
+        assert recv_until(bob, "phase")["phase"] == "generating"

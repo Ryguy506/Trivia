@@ -44,12 +44,13 @@ export function Room({ room, player, onLeave }: Props) {
         </div>
       </header>
       {state.error && <p role="alert" className="error">{state.error}</p>}
-      {state.phase === 'lobby' && <Lobby players={state.players} me={player} onStart={() => send({ type: 'start_game' })} />}
+      {state.phase === 'lobby' && <Lobby players={state.players} me={player} host={state.host} onStart={() => send({ type: 'start_game' })} />}
       {state.phase === 'generating' && <Generating />}
       {state.phase === 'question' && state.question && (
         <Question
           key={state.question.index}
           question={state.question}
+          reveal={state.reveal}
           onAnswer={answer_index => send({ type: 'submit_answer', answer_index })}
         />
       )}

@@ -26,10 +26,7 @@ async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
 
     room.add_player(player_name, websocket)
     await room.broadcast({"type": "player_joined", "player": player_name,
-                          "players": room.player_names()})
-
-    if room.host is None:
-        room.host = player_name
+                          "players": room.player_names(), "host": room.host})
 
     try:
         while True:
@@ -41,7 +38,8 @@ async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
             if not isinstance(data, dict):
                 continue
             if data.get("type") == "start_game":
-                if room.phase != "lobby":  # ignore double-clicks / restarts mid-game
+                # ignore non-hosts, double-clicks and restarts mid-game
+                if room.phase != "lobby" or player_name != room.host:
                     continue
                 await room.change_phase("generating")  # questions usually ready already; the spinner covers the rest
                 try:
@@ -74,6 +72,6 @@ async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
         # Runs on any exit, so a crashed handler can't leave a ghost player holding the round and name
         follow_ups = room.remove_player(player_name)
         await room.broadcast({"type": "player_left", "player": player_name,
-                              "players": room.player_names()})
+                              "players": room.player_names(), "host": room.host})
         for message in follow_ups:
             await room.broadcast(message)
