@@ -45,7 +45,7 @@ Rules:
 - Return exact titles as the tools give them."""
 
 llm = ChatOpenAI(model="openai/gpt-6-luna", api_key=config.TOKEN_ROUTER_API_KEY,
-                 base_url=config.BASE_URL, timeout=30, max_retries=1 , reasoning_effort="none")
+                 base_url=config.BASE_URL,  max_retries=1 , reasoning_effort="none")
 
 
 # Difficulty only changes which articles get picked; hard stays "substantial" so pages aren't stubs

@@ -10,7 +10,7 @@ from wikipedia_mcp.__main__ import main
 from wikipedia_mcp.wikipedia_client import WikipediaClient
 
 # Wikipedia's UA policy asks for a contact (URL or email) in the UA
-USER_AGENT = "TriviaGame/0.1 (trivia-backend)"
+USER_AGENT = "TriviaGame/0.1 (https://github.com/Ryguy506/Trivia)"
 
 WikipediaClient.user_agent = property(lambda self: USER_AGENT, lambda self, value: None)
 
