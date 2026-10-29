@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain_core.tools import BaseTool
@@ -16,7 +18,8 @@ AGENT_TOOLS = {"search_wikipedia", "get_summary"}
 # Pinned so a server update can't change tool names or output shapes under us
 wikipedia_mcp = MultiServerMCPClient({
     "wikipedia": {"transport": "stdio", "command": "uvx",
-                  "args": ["wikipedia-mcp@2.0.1", "--enable-cache"]},
+                  "args": ["--from", "wikipedia-mcp@2.0.1", "python",
+                           str(Path(__file__).with_name("wikipedia_mcp_server.py")), "--enable-cache"]},
 })
 
 
