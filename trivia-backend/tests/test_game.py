@@ -2,6 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api import rooms as rooms_api
 from app.game import room as room_module
 from app.game.graph.schemas import SourcedQuestion
 from app.main import create_app
@@ -27,6 +28,11 @@ async def failing_questions(topic, difficulty):
 def short_reveal(monkeypatch):
     # long enough that every round_result is sent before run_timer sends the next question
     monkeypatch.setattr(room_module, "REVEAL_SECONDS", 0.01)
+
+
+@pytest.fixture(autouse=True)
+def fresh_room_limits(monkeypatch):
+    monkeypatch.setattr(rooms_api, "_created", [])
 
 
 @pytest.fixture
@@ -211,3 +217,30 @@ def test_only_the_host_can_start(make_client):
         assert message == {"type": "chat", "player": "bob", "text": "after start"}
         ann.send_json({"type": "start_game"})
         assert recv_until(bob, "phase")["phase"] == "generating"
+
+
+def test_room_creation_is_limited_per_client(make_client):
+    client = make_client(canned_questions)
+    for _ in range(rooms_api.ROOMS_PER_CLIENT):
+        new_room(client)
+    response = client.post("/rooms", json={"room_name": "Test", "topic": "History"})
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Too many rooms created. Try again in a few minutes."
+
+
+def test_room_creation_is_limited_overall(make_client, monkeypatch):
+    monkeypatch.setattr(rooms_api, "ROOMS_PER_CLIENT", 100)
+    monkeypatch.setattr(rooms_api, "ROOMS_PER_HOUR", 2)
+    client = make_client(canned_questions)
+    new_room(client), new_room(client)
+    assert client.post("/rooms", json={"room_name": "Test", "topic": "History"}).status_code == 429
+    assert len(client.get("/rooms").json()) >= 2  # reads still work
+
+
+def test_old_room_creations_stop_counting(make_client, monkeypatch):
+    client = make_client(canned_questions)
+    for _ in range(rooms_api.ROOMS_PER_CLIENT):
+        new_room(client)
+    # pretend they were all made over an hour ago
+    monkeypatch.setattr(rooms_api, "_created", [(t - 3601, ip) for t, ip in rooms_api._created])
+    assert client.post("/rooms", json={"room_name": "Test", "topic": "History"}).status_code == 201

@@ -7,3 +7,4 @@ load_dotenv()  # also exposes LANGSMITH_* to LangChain, which reads them from th
 
 TOKEN_ROUTER_API_KEY = os.getenv("TOKEN_ROUTER_API_KEY")
 BASE_URL = os.getenv("BASE_URL")
+DEV = os.getenv("DEV") == "1"  # turns on dev-only CORS

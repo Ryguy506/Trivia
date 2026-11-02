@@ -16,6 +16,8 @@ RUN uv sync --locked --no-dev --no-install-project
 RUN uvx --from wikipedia-mcp@2.0.1 python -c "import wikipedia_mcp"
 COPY trivia-backend/ ./
 COPY --from=web /web/dist ./static
+# Trust the host's proxy for the client IP (X-Forwarded-For), used by the room limit
+ENV FORWARDED_ALLOW_IPS="*"
 EXPOSE 8000
 # Hosts like Railway and Render set PORT; one worker, since rooms live in memory
 CMD fastapi run app/main.py --port ${PORT:-8000}
