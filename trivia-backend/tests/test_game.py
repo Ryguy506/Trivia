@@ -1,7 +1,9 @@
 """Whole games over real websockets, with a canned question source: no network."""
 import pytest
+from starlette.websockets import WebSocketDisconnect
 from fastapi.testclient import TestClient
 
+from app import config
 from app.api import rooms as rooms_api
 from app.game import room as room_module
 from app.game.graph.schemas import SourcedQuestion
@@ -244,3 +246,16 @@ def test_old_room_creations_stop_counting(make_client, monkeypatch):
     # pretend they were all made over an hour ago
     monkeypatch.setattr(rooms_api, "_created", [(t - 3601, ip) for t, ip in rooms_api._created])
     assert client.post("/rooms", json={"room_name": "Test", "topic": "History"}).status_code == 201
+
+
+def test_sockets_from_other_sites_are_rejected(make_client, monkeypatch):
+    monkeypatch.setattr(config, "DEV", False)
+    client = make_client(canned_questions)
+    code = new_room(client)
+    with client.websocket_connect(f"/ws/{code}/ann", headers={"origin": "https://evil.example"}) as sock:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            sock.receive_json()
+    assert closed.value.code == 4003
+    # our own page (same host as the server) still connects
+    with client.websocket_connect(f"/ws/{code}/ann", headers={"origin": "http://testserver"}) as sock:
+        assert recv_until(sock, "player_joined")["player"] == "ann"

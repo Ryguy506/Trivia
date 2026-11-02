@@ -1,7 +1,9 @@
 import asyncio
 import json
 import logging
+from urllib.parse import urlparse
 
+from app import config
 from app.game.registry import get_room
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -15,6 +17,13 @@ MIN_QUESTIONS = 5
 @router.websocket("/ws/{room_code}/{player_name}")
 async def room_socket(websocket: WebSocket, room_code: str, player_name: str):
     await websocket.accept()
+
+    # CORS doesn't cover WebSockets: browsers on other sites may connect unless we check Origin.
+    # No Origin means a non-browser client, which could fake one anyway.
+    origin = websocket.headers.get("origin")
+    if origin and not config.DEV and urlparse(origin).netloc != websocket.headers.get("host"):
+        await websocket.close(code=4003, reason="Origin not allowed")
+        return
 
     room = get_room(room_code)
     if room is None:
