@@ -14,6 +14,7 @@ from app.game.graph.state import Document, GraphState
 logger = logging.getLogger(__name__)
 
 QUESTIONS_PER_DOC = 2
+MAX_QUESTIONS_PER_DOC = 4  # narrow topics return few pages, so each page gives more questions
 MIN_CONTENT_CHARS = 200   # skip stubs too short to ground a question
 MAX_CONTENT_CHARS = 8000  # the article's opening is enough for 2 questions and keeps LLM/Jev input small
 MAX_ATTEMPTS = 3
@@ -97,7 +98,7 @@ async def generate(state: GraphState) -> dict:
     if not documents or needed <= 0:
         return {}
 
-    per_doc = min(QUESTIONS_PER_DOC, math.ceil(needed / len(documents)))
+    per_doc = min(MAX_QUESTIONS_PER_DOC, math.ceil(needed / len(documents)))
     # One call for all pages: TokenRouter allows only 10 requests a minute
     context = "\n\n".join(f"[Source {i}] {doc['title']}\n{doc['content']}" for i, doc in enumerate(documents))
     try:

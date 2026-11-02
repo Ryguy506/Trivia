@@ -120,10 +120,20 @@ def test_generate_writes_all_questions_in_one_call_and_maps_sources(monkeypatch)
 
     assert len(calls) == 1
     assert calls[0]["difficulty"] == DIFFICULTY["hard"]
+    assert calls[0]["per_source"] == nodes.MAX_QUESTIONS_PER_DOC  # 10 needed from only 2 pages
     assert "[Source 0] Rome" in calls[0]["context"] and "[Source 1] Carthage" in calls[0]["context"]
     # out-of-range source dropped, near-duplicate dropped
     assert [(x.question, x.source_url) for x in out["questions"]] == [("About Rome?", "u/rome"),
                                                                       ("About Carthage?", "u/carthage")]
+
+
+def test_generate_drops_only_the_invalid_question():
+    from app.game.graph.chains.generation import Generate
+
+    good = {"question": "Who is it?", "options": ["A", "B", "C", "D"], "correct_index": 0,
+            "supporting_quote": "The answer is A.", "source": 0}
+    dup = {**good, "options": ["A", "A", "C", "D"]}
+    assert [q.options for q in Generate.model_validate({"questions": [dup, good]}).questions] == [good["options"]]
 
 
 def test_failed_generation_keeps_earlier_questions(monkeypatch):

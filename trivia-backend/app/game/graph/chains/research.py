@@ -31,16 +31,21 @@ class ArticlePicks(BaseModel):
 
 system = """You pick Wikipedia articles that will supply source material for trivia questions.
 
-Find {num_articles} articles for the given trivia topic.
+Find up to {num_articles} articles for the given trivia topic.
 
 How to work:
-1. First brainstorm specific subjects {audience}.
-2. Then search for those subjects by name, in parallel, to get their exact article titles.
+1. First decide whether the topic is broad (a field like "Space" or "Geography") or narrow (one
+   work, person, team, band, franchise or event, like "The Office" or "Taylor Swift").
+2. Brainstorm specific subjects {audience}.
+3. Then search for those subjects by name, in parallel, to get their exact article titles.
 
 Rules:
-- Each article is about one specific subject (a person, place, event, dish, brand, work...).
-  Avoid broad overviews, lists, and disambiguation pages.
-- Spread across the whole topic; don't cluster around one theme.
+- Broad topic: each article is about one specific subject (a person, place, event, dish, brand,
+  work...). Avoid broad overviews. Spread across the whole topic; don't cluster around one theme.
+- Narrow topic: include the topic's own main article, then its parts (characters, episodes,
+  members, albums, seasons, places, key events). Return fewer articles rather than pad with
+  loosely related ones.
+- Avoid lists and disambiguation pages.
 - Never pick an article from the already-used list.
 - Return exact titles as the tools give them."""
 
